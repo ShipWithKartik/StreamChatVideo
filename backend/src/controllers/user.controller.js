@@ -1,5 +1,7 @@
 import User from "../models/User.js";
 import FriendRequest from "../models/FriendRequest.js";
+import cloudinary from "../lib/cloudinary.js";
+import { upsertStreamUser } from "../lib/stream.js";
 
 export async function getRecommendedUsers(req, res) {
   try {
@@ -24,7 +26,7 @@ export async function getMyFriends(req, res) {
   try {
     const user = await User.findById(req.user.id)
       .select("friends")
-      .populate("friends", "fullName profilePic nativeLanguage learningLanguage");
+      .populate("friends", "fullName profilePic profilePicture nativeLanguage learningLanguage");
 
     res.status(200).json(user.friends);
   } catch (error) {
@@ -119,12 +121,12 @@ export async function getFriendRequests(req, res) {
     const incomingReqs = await FriendRequest.find({
       recipient: req.user.id,
       status: "pending",
-    }).populate("sender", "fullName profilePic nativeLanguage learningLanguage");
+    }).populate("sender", "fullName profilePic profilePicture nativeLanguage learningLanguage");
 
     const acceptedReqs = await FriendRequest.find({
       sender: req.user.id,
       status: "accepted",
-    }).populate("recipient", "fullName profilePic");
+    }).populate("recipient", "fullName profilePic profilePicture");
 
     res.status(200).json({ incomingReqs, acceptedReqs });
   } catch (error) {
@@ -138,11 +140,186 @@ export async function getOutgoingFriendReqs(req, res) {
     const outgoingRequests = await FriendRequest.find({
       sender: req.user.id,
       status: "pending",
-    }).populate("recipient", "fullName profilePic nativeLanguage learningLanguage");
+    }).populate("recipient", "fullName profilePic profilePicture nativeLanguage learningLanguage");
 
     res.status(200).json(outgoingRequests);
   } catch (error) {
     console.log("Error in getOutgoingFriendReqs controller", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function uploadAvatar(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No image file provided" });
+    }
+
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Delete the old image from Cloudinary if one exists
+    if (user.profilePicturePublicId) {
+      try {
+        await cloudinary.uploader.destroy(user.profilePicturePublicId);
+      } catch (deleteError) {
+        console.log("Error deleting old avatar from Cloudinary:", deleteError.message);
+      }
+    }
+
+    // req.file.path = Cloudinary URL, req.file.filename = Cloudinary public_id
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        profilePicture: req.file.path,
+        profilePicturePublicId: req.file.filename,
+      },
+      { new: true }
+    ).select("-password");
+
+    // Sync the new avatar to Stream Chat
+    try {
+      await upsertStreamUser({
+        id: updatedUser._id.toString(),
+        name: updatedUser.fullName,
+        image: updatedUser.profilePicture || updatedUser.profilePic || "",
+      });
+    } catch (streamError) {
+      console.log("Error syncing avatar to Stream:", streamError.message);
+    }
+
+    res.status(200).json({ success: true, user: updatedUser });
+  } catch (error) {
+    console.error("Error in uploadAvatar controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function getUserProfile(req, res) {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user._id.toString();
+
+    const user = await User.findById(userId)
+      .select("-password -profilePicturePublicId")
+      .populate("friends", "fullName profilePic profilePicture nativeLanguage learningLanguage");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Compute mutual friends: users who are in BOTH the profile user's and the requesting user's friends lists
+    const currentUser = await User.findById(currentUserId).select("friends");
+
+    const profileFriendIds = new Set(user.friends.map((f) => f._id.toString()));
+    const mutualFriendIds = currentUser.friends
+      .map((id) => id.toString())
+      .filter((id) => profileFriendIds.has(id));
+
+    const mutualFriends = await User.find({ _id: { $in: mutualFriendIds } }).select(
+      "fullName profilePic profilePicture nativeLanguage learningLanguage"
+    );
+
+    res.status(200).json({
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        profilePic: user.profilePic,
+        profilePicture: user.profilePicture,
+        nativeLanguage: user.nativeLanguage,
+        learningLanguage: user.learningLanguage,
+        bio: user.bio,
+        location: user.location,
+        country: user.country,
+        createdAt: user.createdAt,
+        isOnboarded: user.isOnboarded,
+        friendCount: user.friends.length,
+      },
+      mutualFriends,
+    });
+  } catch (error) {
+    console.error("Error in getUserProfile controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function updateProfile(req, res) {
+  try {
+    const userId = req.user._id;
+    const { bio, country } = req.body;
+
+    // Validate bio length
+    if (bio !== undefined && bio.length > 200) {
+      return res.status(400).json({ message: "Bio must be 200 characters or less" });
+    }
+
+    // Build update object — only include fields that were provided
+    const updateFields = {};
+    if (bio !== undefined) updateFields.bio = bio;
+    if (country !== undefined) updateFields.country = country;
+
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({ message: "No fields to update" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateFields, { new: true }).select(
+      "-password -profilePicturePublicId"
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({ success: true, user: updatedUser });
+  } catch (error) {
+    console.error("Error in updateProfile controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function searchUsers(req, res) {
+  try {
+    const currentUserId = req.user._id;
+    const { name, nativeLanguage, learningLanguage, country } = req.query;
+
+    // If no query params provided, return empty array
+    if (!name && !nativeLanguage && !learningLanguage && !country) {
+      return res.status(200).json([]);
+    }
+
+    const filter = {
+      _id: { $ne: currentUserId },
+      isOnboarded: true,
+    };
+
+    if (name) {
+      filter.fullName = { $regex: name, $options: "i" };
+    }
+    if (nativeLanguage) {
+      filter.nativeLanguage = { $regex: `^${nativeLanguage}$`, $options: "i" };
+    }
+    if (learningLanguage) {
+      filter.learningLanguage = { $regex: `^${learningLanguage}$`, $options: "i" };
+    }
+    if (country) {
+      filter.$or = [
+        { country: { $regex: country, $options: "i" } },
+        { location: { $regex: country, $options: "i" } },
+      ];
+    }
+
+    const users = await User.find(filter)
+      .select("-password -profilePicturePublicId")
+      .limit(20);
+
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("Error in searchUsers controller:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 }

@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { acceptFriendRequest, getFriendRequests } from "../lib/api";
 import { BellIcon, ClockIcon, MessageSquareIcon, UserCheckIcon } from "lucide-react";
 import NoNotificationsFound from "../components/NoNotificationsFound";
+import { getProfilePicUrl } from "../lib/utils";
+import { Link } from "react-router";
 
 const NotificationsPage = () => {
   const queryClient = useQueryClient();
@@ -50,11 +52,13 @@ const NotificationsPage = () => {
                       <div className="card-body p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="avatar w-14 h-14 rounded-full bg-base-300">
-                              <img src={request.sender.profilePic} alt={request.sender.fullName} />
-                            </div>
+                            <Link to={`/profile/${request.sender._id}`} className="avatar w-14 h-14 rounded-full bg-base-300">
+                              <img src={getProfilePicUrl(request.sender)} alt={request.sender.fullName} />
+                            </Link>
                             <div>
-                              <h3 className="font-semibold">{request.sender.fullName}</h3>
+                              <Link to={`/profile/${request.sender._id}`} className="font-semibold hover:underline">
+                                {request.sender.fullName}
+                              </Link>
                               <div className="flex flex-wrap gap-1.5 mt-1">
                                 <span className="badge badge-secondary badge-sm">
                                   Native: {request.sender.nativeLanguage}
@@ -94,14 +98,16 @@ const NotificationsPage = () => {
                     <div key={notification._id} className="card bg-base-200 shadow-sm">
                       <div className="card-body p-4">
                         <div className="flex items-start gap-3">
-                          <div className="avatar mt-1 size-10 rounded-full">
+                          <Link to={`/profile/${notification.recipient._id}`} className="avatar mt-1 size-10 rounded-full">
                             <img
-                              src={notification.recipient.profilePic}
+                              src={getProfilePicUrl(notification.recipient)}
                               alt={notification.recipient.fullName}
                             />
-                          </div>
+                          </Link>
                           <div className="flex-1">
-                            <h3 className="font-semibold">{notification.recipient.fullName}</h3>
+                            <Link to={`/profile/${notification.recipient._id}`} className="font-semibold hover:underline">
+                              {notification.recipient.fullName}
+                            </Link>
                             <p className="text-sm my-1">
                               {notification.recipient.fullName} accepted your friend request
                             </p>

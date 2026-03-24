@@ -63,3 +63,45 @@ export async function getStreamToken() {
   const response = await axiosInstance.get("/chat/token");
   return response.data;
 }
+
+export async function uploadAvatar(file) {
+  const formData = new FormData();
+  formData.append("avatar", file);
+  const response = await axiosInstance.post("/users/upload-avatar", formData);
+  return response.data;
+}
+
+export async function getRooms() {
+  const response = await axiosInstance.get("/rooms");
+  return response.data;
+}
+
+export async function joinRoom(roomId) {
+  const response = await axiosInstance.post(`/rooms/join/${roomId}`);
+  return response.data;
+}
+
+export async function findOrCreateRoom({ languageOne, languageTwo }) {
+  const response = await axiosInstance.post("/rooms/find-or-create", { languageOne, languageTwo });
+  return response.data;
+}
+
+export async function getUserProfile(userId) {
+  const response = await axiosInstance.get(`/users/profile/${userId}`);
+  return response.data;
+}
+
+export async function updateProfile(data) {
+  const response = await axiosInstance.patch("/users/profile", data);
+  return response.data;
+}
+
+export async function searchUsers(params) {
+  const query = new URLSearchParams();
+  if (params.name) query.set("name", params.name);
+  if (params.nativeLanguage) query.set("nativeLanguage", params.nativeLanguage);
+  if (params.learningLanguage) query.set("learningLanguage", params.learningLanguage);
+  if (params.country) query.set("country", params.country);
+  const response = await axiosInstance.get(`/users/search?${query.toString()}`);
+  return response.data;
+}

@@ -7,7 +7,12 @@ import {
   getOutgoingFriendReqs,
   getRecommendedUsers,
   sendFriendRequest,
+  uploadAvatar,
+  getUserProfile,
+  updateProfile,
+  searchUsers,
 } from "../controllers/user.controller.js";
+import { upload } from "../middleware/upload.middleware.js";
 
 const router = express.Router();
 
@@ -22,5 +27,11 @@ router.put("/friend-request/:id/accept", acceptFriendRequest);
 
 router.get("/friend-requests", getFriendRequests);
 router.get("/outgoing-friend-requests", getOutgoingFriendReqs);
+
+router.post("/upload-avatar", upload.single("avatar"), uploadAvatar);
+
+router.get("/search", searchUsers);
+router.get("/profile/:userId", getUserProfile);
+router.patch("/profile", updateProfile);
 
 export default router;

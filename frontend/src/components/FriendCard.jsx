@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { LANGUAGE_TO_FLAG } from "../constants";
+import { getProfilePicUrl } from "../lib/utils";
 
 const FriendCard = ({ friend }) => {
   return (
@@ -7,10 +8,12 @@ const FriendCard = ({ friend }) => {
       <div className="card-body p-4">
         {/* USER INFO */}
         <div className="flex items-center gap-3 mb-3">
-          <div className="avatar size-12">
-            <img src={friend.profilePic} alt={friend.fullName} />
-          </div>
-          <h3 className="font-semibold truncate">{friend.fullName}</h3>
+          <Link to={`/profile/${friend._id}`} className="avatar size-12">
+            <img src={getProfilePicUrl(friend)} alt={friend.fullName} />
+          </Link>
+          <Link to={`/profile/${friend._id}`} className="font-semibold truncate hover:underline">
+            {friend.fullName}
+          </Link>
         </div>
 
         <div className="flex flex-wrap gap-1.5 mb-3">

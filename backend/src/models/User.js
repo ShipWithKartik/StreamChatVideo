@@ -25,6 +25,14 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    profilePicture: {
+      type: String,
+      default: "",
+    },
+    profilePicturePublicId: {
+      type: String,
+      default: "",
+    },
     nativeLanguage: {
       type: String,
       default: "",
@@ -34,6 +42,10 @@ const userSchema = new mongoose.Schema(
       default: "",
     },
     location: {
+      type: String,
+      default: "",
+    },
+    country: {
       type: String,
       default: "",
     },
